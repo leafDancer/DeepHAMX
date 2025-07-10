@@ -15,7 +15,7 @@ Link to code repository: https://github.com/frankhan91/DeepHAM
 
 ## Dependencies
 * Quick installation of conda environment for Python: ``conda env create -f environment.yml``
-
+* For JAX version setup instructions, please refer to: [`srcx/README.md`](./srcx/README.md)
 ## Running
 ### Quick start for the Krusell-Smith (KS) model under default configs:
 To use DeepHAM to solve the competitive equilibrium of the KS model, run
