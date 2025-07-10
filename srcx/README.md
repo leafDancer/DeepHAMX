@@ -8,3 +8,18 @@ pip install jax[cuda12] dm-haiku optax pickle tqdm scipy # If I missed anything,
 cd srcx
 python train_KS.py
 ```
+### Performance Tests
+**Decice Info**
+
+- 8 Nvidia GeForce 3090 24GB
+- 2 AMD EPYC 7H12 64-Core Processor
+- CUDA 12.2
+
+| FP  | Arch | CUDA Streams | Runtime  | Valid U  | End K  |
+|:-----:|:------:|:-------------:|:---------:|:---------:|:-------:|
+| 32  | JAX  | 1           | 17m      | 104.035  | 39.237 |
+| 32  | JAX  | 2           | 17m      | 104.096  | 38.329 |
+| 64  | JAX  | 1           | 41m      | 103.728  | 38.380 |
+| 64  | JAX  | 2           | 34m      | 103.707  | 39.361 |
+| 32  | NUMPY| 1           | 57m      | 103.702  | 39.014 |
+| 64  | NUMPY| 1           | 65m      | 104.126  | 39.326 |
