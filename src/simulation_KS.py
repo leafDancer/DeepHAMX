@@ -35,6 +35,13 @@ def simul_shocks(n_sample, T, mparam, state_init=None):
     ashock = (ashock * 2 - 1) * mparam.delta_a + 1  # convert 0/1 variable to productivity
     return ashock, ishock
 
+'''from param import KSParam
+mparam = KSParam(50, 0.99, "./configs/KS/game_nn_n50.json")
+import time
+st = time.time()
+for _ in range(10):
+    a,i = simul_shocks(384,2000,mparam)
+print(time.time()-st)'''
 
 def simul_k(n_sample, T, mparam, policy, policy_type, state_init=None, shocks=None):
     # policy_type: "pde" or "nn_share"

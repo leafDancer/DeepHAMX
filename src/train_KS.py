@@ -18,6 +18,7 @@ flags.DEFINE_string("exp_name", "test",
 FLAGS = flags.FLAGS
 
 def main(argv):
+    start_time = time.monotonic()
     del argv
     with open(FLAGS.config_path, 'r') as f:
         config = json.load(f)
@@ -34,7 +35,6 @@ def main(argv):
     with open(os.path.join(model_path, "config_beg.json"), 'w') as f:
         json.dump(config, f)
 
-    start_time = time.monotonic()
 
     # initial value training
     init_ds = KSInitDataSet(mparam, config)
@@ -50,11 +50,14 @@ def main(argv):
     vtrainers = [ValueTrainer(config) for i in range(value_config["num_vnet"])]
     for vtr in vtrainers:
         vtr.train(train_vds, valid_vds, value_config["num_epoch"], value_config["batch_size"])
-
+    
     # iterative policy and value training
     policy_config = config["policy_config"]
     ptrainer = KSPolicyTrainer(vtrainers, init_ds)
     ptrainer.train(policy_config["num_step"], policy_config["batch_size"])
+
+    end_time = time.monotonic()
+    print_elapsedtime(end_time - start_time)
 
     # save config and models
     with open(os.path.join(model_path, "config.json"), 'w') as f:

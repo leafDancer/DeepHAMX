@@ -1,7 +1,7 @@
 
 import jax.numpy as jnp
 
-DTYPE = "float32"
+DTYPE = "float64"
 if DTYPE == "float64":
     JNP_DTYPE = jnp.float64
 elif DTYPE == "float32":
