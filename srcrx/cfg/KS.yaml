@@ -1,0 +1,17 @@
+model_name : KS
+model_complete_name : Krusell-Smith 1998
+n_agent : 50
+alpha : 0.36  # share of capital in the production function
+delta : 0.025 # depreciation rate
+delta_a : 0.01  # (1-delta_a) is the productivity level in a bad state, and (1+delta_a) is the productivity level in a good state
+mu : 0.15 # unemployment benefits as a share of wage
+eps_u : 0 # idiosyncratic shock if the agent is unemployed
+eps_e : 1 # idiosyncratic shock if the agent is employed
+ur_b : 0.1 # unemployment rate in a bad aggregate state
+ur_g : 0.04 # unemployment rate in a good aggregate state
+beta : 0.99 # discount factor
+prob_trans : [[0.525, 0.35, 0.03125, 0.09375],
+[0.038889, 0.836111, 0.002083, 0.122917],
+[0.09375, 0.03125, 0.291667, 0.583333],
+[0.009115, 0.115885, 0.024306, 0.850694]]
+EPS : 0.001 # to void consume or save all of one's wealth
