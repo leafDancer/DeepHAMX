@@ -1,6 +1,7 @@
 model_name : KS
 model_complete_name : Krusell-Smith 1998
-n_agent : 50
+n_agent : 100
+observation_shape : [100, 4]
 alpha : 0.36  # share of capital in the production function
 delta : 0.025 # depreciation rate
 delta_a : 0.01  # (1-delta_a) is the productivity level in a bad state, and (1+delta_a) is the productivity level in a good state

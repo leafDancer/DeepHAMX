@@ -6,6 +6,7 @@ from functools import partial
 from _src.struct import dataclass
 
 def _get_details(self):
+    self.observation_shape = tuple(self.observation_shape)
     self.prob_ag = jnp.zeros([2, 2])
     self.prob_trans = jnp.array(self.prob_trans)
 
@@ -41,7 +42,10 @@ class StateKS:
     k_cross : jnp.ndarray
     ashock : jnp.int_
     ishock : jnp.ndarray
-
+    ep : jnp.int_
+    observation : jnp.ndarray
+    rewards : jnp.ndarray
+    terminated : jnp.bool_
 
 class KSXEnv:
     def __init__(self, cfg_path="cfg/KS.yaml") -> None:
@@ -54,15 +58,15 @@ class KSXEnv:
     @partial(jax.jit, static_argnums=(0,))
     def _ashock2tfp(self, ashock:jnp.ndarray):
         '''convert ashock to tfp'''
-        return (ashock * 2 - 1) * self.delta_a - 1
+        return (ashock * 2 - 1) * self.delta_a + 1
     
     @partial(jax.jit, static_argnums=(0,))
-    def _state2obs(self, s:StateKS):
+    def _state2obs(self, k_cross,ashock,ishock):
         obs = jnp.zeros((self.n_agent,4))
-        obs = obs.at[...,0].set(s.k_cross)
-        obs = obs.at[...,1].set(s.k_cross.mean())
-        obs = obs.at[...,2].set(s.ashock)
-        obs = obs.at[...,3].set(s.ishock)
+        obs = obs.at[...,0].set(k_cross)
+        obs = obs.at[...,1].set(k_cross.mean())
+        obs = obs.at[...,2].set(ashock)
+        obs = obs.at[...,3].set(ishock)
         return obs
 
     @partial(jax.jit, static_argnums=(0,))
@@ -74,11 +78,11 @@ class KSXEnv:
         rand = random.uniform(subkey, self.n_agent)
         ishock = jnp.where(rand < ur_rate, jnp.zeros(self.n_agent), jnp.ones(self.n_agent))
         k_cross = jnp.ones(self.n_agent) * self.k_ss
-        state = StateKS(k_cross,ashock,ishock)
-        return state, self._state2obs(state)
+        u = jnp.zeros(self.n_agent)
+        return StateKS(k_cross,ashock,ishock,jnp.int32(0),self._state2obs(k_cross,ashock,ishock),u,jnp.zeros(self.n_agent,dtype=bool))
 
     @partial(jax.jit, static_argnums=(0,))
-    def step(self, key:random.PRNGKey, state:StateKS, actions:jnp.ndarray):
+    def step(self, state:StateKS, actions:jnp.ndarray, key:random.PRNGKey, ):
         '''
             state = {k_cross, ashock, ishock}
             actions.shape = (self.n_agent,1) and must be within (0,1)
@@ -96,7 +100,7 @@ class KSXEnv:
         # Secondly, consume 1-actions
         saving_rate = actions[...,0]
         csmp = jnp.clip(wealth * (1 - saving_rate), self.EPS, wealth-self.EPS)
-        u = jnp.log(csmp)
+        u = jnp.log(csmp)/100
         # Finally, update shocks
         subkey, key = random.split(key)
         if_keep = random.binomial(subkey, 1, 0.875)
@@ -108,28 +112,40 @@ class KSXEnv:
         ur_rate += state.ashock * ashock * (1 - state.ishock) * self.p_gg_uu + state.ashock * ashock * state.ishock * self.p_gg_eu
         subkey,key = random.split(key)
         rand = random.uniform(subkey,self.n_agent)
-        ishock = jnp.where(rand<ur_rate,jnp.zeros_like(state.ishock),state.ishock)
-        state = state.replace(k_cross=wealth-csmp, ashock=ashock, ishock=ishock)
-
-        return state, self._state2obs(state), u
+        ishock = jnp.where(rand<ur_rate,jnp.zeros_like(state.ishock),jnp.ones_like(state.ishock))
+        k_cross = wealth - csmp
+        # Set states
+        ep = state.ep + 1
+        terminated = jax.lax.cond(ep>=1100,lambda:jnp.ones(self.n_agent,dtype=bool),lambda:jnp.zeros(self.n_agent,dtype=bool))
+        return state.replace(
+            k_cross=k_cross, 
+            ashock=ashock, 
+            ishock=ishock, 
+            ep=ep,
+            observation=self._state2obs(k_cross,ashock,ishock),
+            rewards=u,
+            terminated=terminated)
         
 if __name__ == "__main__":
     import time
 
     env = KSXEnv()
     subkey,key = random.split(random.PRNGKey(99))
-    keys = random.split(subkey, (4,128))
+    reset_fn = env.reset
+    s = reset_fn(subkey)
+    print(s.k_cross)
 
-    reset_fn = jax.pmap(jax.vmap(env.reset))
-    s,o = reset_fn(keys)
-
-    subkey,key = random.split(key)
-    step_fn = jax.pmap(jax.vmap(env.step))
-    keys = random.split(subkey, (4,128))
-    rand_actions = random.uniform(key, (4,128,env.n_agent,1))
+    step_fn = env.step
     st = time.time()
+    r = 0
+    g = 1
     for _ in range(1000):
-        step_fn(keys, s, rand_actions)
+        subkey,key = random.split(key)
+        a = jnp.ones((50,1)) * 0.925
+        s = step_fn(s, a, key)
+        r += g*s.rewards
+        g *= 0.99
+    print(r.mean(),s.k_cross.max(),s.k_cross.min())
     print(f"for loop 1000 steps: total {time.time()-st:.4f}s, {(time.time()-st)/1000:.5f}s per step.")
     
     

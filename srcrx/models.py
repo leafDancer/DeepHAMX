@@ -12,11 +12,11 @@ class ActorCriticKS(hk.Module):
         self.hidden_dim = hidden_dim
 
     def __call__(self, inputs:jnp.ndarray):
-        x = inputs.astype(jnp.float32)
-        x = jax.nn.tanh(hk.Linear(self.hidden_dim)(inputs))
+        x = inputs
         # actor
-        actor_mean = hk.nets.MLP((self.hidden_dim,self.hidden_dim,1),activation=jax.nn.tanh)(x)
+        actor_mean =  jax.nn.sigmoid(4*hk.nets.MLP((self.hidden_dim,self.hidden_dim,1),activation=jax.nn.tanh)(x)).squeeze()
         # critic
-        critic = hk.nets.MLP((self.hidden_dim,self.hidden_dim,1),activation=jax.nn.tanh)(x).squeeze(axis=-1)
+        critic = hk.nets.MLP((self.hidden_dim,self.hidden_dim,1),activation=jax.nn.tanh)(x).squeeze()
+
         return actor_mean, critic
     
