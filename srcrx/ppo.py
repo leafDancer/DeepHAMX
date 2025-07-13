@@ -1,3 +1,8 @@
+"""This PPO implementation is modified from PureJaxRL:
+
+  https://github.com/luchris429/purejaxrl
+
+Please refer to their work if you use this example in your research."""
 import sys
 import jax
 import jax.numpy as jnp
