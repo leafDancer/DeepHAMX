@@ -10,7 +10,7 @@ import time
 from omegaconf import OmegaConf
 from pydantic import BaseModel
 
-from envs import KSXEnv
+from envs import KSXEnv,KSXEnvSteady
 from models import ActorCriticKS
 
 class PPOConfig(BaseModel):
@@ -38,9 +38,9 @@ class PPOConfig(BaseModel):
 
 args = PPOConfig(**OmegaConf.to_object(OmegaConf.from_cli()))
 print(args)
-env = KSXEnv()
+env = KSXEnvSteady()
 
-num_updates = args.total_timesteps // args.num_envs // args.num_steps
+num_updates = 35 #args.total_timesteps // args.num_envs // args.num_steps
 num_minibatches = args.num_envs * args.num_steps // args.minibatch_size
 
 def forward_fn(x):
