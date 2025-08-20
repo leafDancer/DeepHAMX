@@ -1,6 +1,6 @@
-name: deepham
+name: deephamx
 dependencies:
-  - python=3.8
+  - python=3.11.0
   - numpy
   - scipy
   - matplotlib
@@ -9,7 +9,10 @@ dependencies:
   - quantecon
   - pip
   - pip:
-    - tensorflow==2.13
     - seaborn
     - pandas
+    - jax[cuda12]
+    - dm-haiku
+    - optax
+    - pickle
     
