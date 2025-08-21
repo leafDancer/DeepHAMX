@@ -1,4 +1,4 @@
-# DeepHAMX: JAX-Accelerated Drop-in Replacement for DeepHAM (3.5× Faster, Algorithm-Preserving)
+# DeepHAMX: JAX-Accelerated Drop-in Replacement for DeepHAM
 ## Original Version
 <div align="center">
 
@@ -14,7 +14,7 @@ Link to original repository: https://github.com/frankhan91/DeepHAM
 
 </div>
 
-## Dependencies
+## Dependencies of DeepHAMX
 ```bash
 # You can use our environment.yml file
 conda env create -f environment.yml
