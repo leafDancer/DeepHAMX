@@ -62,4 +62,4 @@ If you find this work helpful, please consider starring this repo and citing our
 ```
 
 ## Contact
-Please contact us at jiequnhan@gmail.com and yucheng.yang@uzh.ch if you have any questions of DeepHAM and at wang2021@stu.pku.edu.cn if you have any questions of DeepHAM-X.
+Please contact us at jiequnhan@gmail.com and yucheng.yang@uzh.ch if you have any questions about DeepHAM and at wang2021@stu.pku.edu.cn if you have any questions about DeepHAM-X.
