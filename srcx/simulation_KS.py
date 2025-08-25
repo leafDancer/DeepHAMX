@@ -64,14 +64,6 @@ def simul_shocks(key, n_sample, T, mparam, state_init=None):
     ashock = (ashock * 2 - 1) * mparam.delta_a + 1  # convert 0/1 variable to productivity
     return ashock, ishock
 
-'''from param import KSParam
-mparam = KSParam(50, 0.99, "./configs/KS/game_nn_n50.json")
-import time
-st = time.time()
-for _ in range(10):
-    a,i = simul_shocks(jax.random.PRNGKey(1990),384,2000,mparam)
-print(time.time()-st)'''
-
 def simul_k(key, n_sample, T, mparam, policy, policy_type, state_init=None, shocks=None, model=None):
     # policy_type: "pde" or "nn_share"
     # return k_cross [n_sample, n_agt, T]
@@ -143,33 +135,6 @@ def next_wealth(k_cross, ashock, ishock, mparam):
     wealth = R * k_cross + (1-tau)*wage*mparam.l_bar*ishock + mparam.mu*wage*(1-ishock)
     return wealth
 
-'''def k_policy_bspl(k_cross, ashock, ishock, splines):
-    k_next = jnp.zeros_like(k_cross)
-    k_mean = jnp.repeat(jnp.mean(k_cross, axis=1, keepdims=True), k_cross.shape[1], axis=1)
-
-    # 构造一个辅助函数做插值调用转换
-    def interp_func(spline, xq, yq):
-        points = jnp.stack([xq, yq], axis=-1)  # shape (N, 2)
-        return spline(points)
-
-    idx = ((ashock < 1) & (ishock == 0))
-    k_tmp, km_tmp = k_cross[idx], k_mean[idx]
-    k_next = k_next.at[idx].set(interp_func(splines['00'], k_tmp, km_tmp))
-
-    idx = ((ashock < 1) & (ishock == 1))
-    k_tmp, km_tmp = k_cross[idx], k_mean[idx]
-    k_next = k_next.at[idx].set(interp_func(splines['01'], k_tmp, km_tmp))
-
-    idx = ((ashock > 1) & (ishock == 0))
-    k_tmp, km_tmp = k_cross[idx], k_mean[idx]
-    k_next = k_next.at[idx].set(interp_func(splines['10'], k_tmp, km_tmp))
-
-    idx = ((ashock > 1) & (ishock == 1))
-    k_tmp, km_tmp = k_cross[idx], k_mean[idx]
-    k_next = k_next.at[idx].set(interp_func(splines['11'], k_tmp, km_tmp))
-
-    return k_next
-'''
 def k_policy_bspl(k_cross, ashock, ishock, splines):
     k_next = jnp.zeros_like(k_cross, dtype=JNP_DTYPE)
     k_mean = jnp.repeat(jnp.mean(k_cross, axis=1, keepdims=True), k_cross.shape[1], axis=1)
@@ -178,7 +143,7 @@ def k_policy_bspl(k_cross, ashock, ishock, splines):
         points = jnp.stack([xq, yq], axis=-1, dtype=JNP_DTYPE)
         return spline(points)
 
-    # 向量化处理所有情况
+    # parallely handle all cases
     def apply_case(mask, spline_key):
         k_tmp = jnp.where(mask, k_cross, 0.0)
         km_tmp = jnp.where(mask, k_mean, 0.0)
@@ -193,7 +158,7 @@ def k_policy_bspl(k_cross, ashock, ishock, splines):
 
 def construct_bspl(mats):
     def psedo_RBS(x,y,z):
-        '''使用jax.scipy中的常规插值器模拟其行为，会有微小差别但是影响不大，预计2025年7月jax会支持scipy1.11'''
+        '''jax.scipy.interpolate only support linear interpolation.'''
         return jscipy.interpolate.RegularGridInterpolator((x,y),z,method="linear")
     # mats is saved in Matlab through
     # "save(filename, 'kprime', 'k', 'km', 'agshock', 'idshock', 'kmts', 'kcross');"

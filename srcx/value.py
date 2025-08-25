@@ -27,7 +27,7 @@ class ValueTrainer():
         self.train_vars = None
         self.optimizer = optax.adam(learning_rate=self.value_config["lr"],b1=0.99,b2=0.99)
 
-        # 初始化参数 
+        # init parameters
         dummy_input = jnp.ones((256*50,4), dtype=JNP_DTYPE)
         self.model = self.forward.init(jax.random.PRNGKey(0), dummy_input)
         self.opt_state = self.optimizer.init(params=self.model[0])
@@ -36,13 +36,13 @@ class ValueTrainer():
 
     def prepare_state_v(self, input_data, split_and_flat=True):
         if self.config["n_fm"] == 2:
-            # 计算方差并扩展维度 (等价于 tf.reduce_variance + tile)
+            # variance + expand dim (equivalent to tf.reduce_variance + tile)
             k_var = jnp.var(input_data["agt_s"], axis=-2, keepdims=True)
             k_var = jnp.repeat(k_var, input_data["agt_s"].shape[-2], axis=-2)
             state = jnp.concatenate([input_data["basic_s"], k_var], axis=-1, dtype=JNP_DTYPE)
             
         elif self.config["n_fm"] == 0:
-            # 选择特定列 (等价于 basic_s[..., 0:1] 和 basic_s[..., 2:])
+            # select col (equivalent to basic_s[..., 0:1] and basic_s[..., 2:])
             part1 = input_data["basic_s"][..., 0:1]
             part2 = input_data["basic_s"][..., 2:]
             state = jnp.concatenate([part1, part2], axis=-1, dtype=JNP_DTYPE)
@@ -51,7 +51,7 @@ class ValueTrainer():
             state = input_data["basic_s"]
         
         if self.config["n_gm"] > 0:
-            raise NotImplementedError("n_gm > 0 尚未实现")
+            raise NotImplementedError("n_gm > 0 not yet implemented!")
         
         if split_and_flat:
             valid_size = self.value_config['valid_size']*self.config['n_agt']
@@ -69,7 +69,7 @@ class ValueTrainer():
         train_step = jax.pmap(self.train_step,axis_name="i")
         loss_fn = jax.pmap(self.loss_fn)
 
-        expand_factor = 2 # 整体训练规模的扩大系数 原过程训练规模太小
+        expand_factor = 2
         real_num_ep = int(num_epoch * expand_factor * self.n_device / 2)
         print_freq = 20 * expand_factor
         for ep in range(real_num_ep):

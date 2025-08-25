@@ -10,7 +10,7 @@ from param import DTYPE,JNP_DTYPE
 EPSILON = 1e-3
 
 
-@partial(jax.jit, static_argnums=(2,))  # 将 `size` 设为静态，而不是 `datadict`
+@partial(jax.jit, static_argnums=(2,)) 
 def _jit_shuffle(datadict, key, size):
     ixs = jax.random.permutation(key, jnp.arange(size))
     return jax.tree_util.tree_map(lambda x: x[ixs], datadict)
@@ -139,14 +139,13 @@ class InitDataSet(DataSetwithStats):
         
         num_nan = jnp.sum(~notnan)
     
-        # 定义抛出错误的回调函数
         def _raise_error():
-            raise ValueError(f"训练终止：检测到 {num_nan} 个 NaN 样本！")
+            raise ValueError(f"Training Stop: There are {num_nan} NaN Samples!")
         
-        # 条件检查
+        # check nans
         jax.lax.cond(
             num_nan > 0,
-            lambda: jax.debug.callback(_raise_error),  # 传递函数而非直接调用
+            lambda: jax.debug.callback(_raise_error),
             lambda: None
         )
         self.update_datadict(key, init_datadict)

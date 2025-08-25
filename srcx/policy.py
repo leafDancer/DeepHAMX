@@ -81,10 +81,10 @@ class PolicyTrainer():
     def policy_fn(self, model_param, model_state, input_data):
         state = self.prepare_state_p(input_data)
         #org = state.shape
-        #state = state.reshape(self.n_device,-1,org[-1]) # 同时过n卡 其余维度展平
+        #state = state.reshape(self.n_device,-1,org[-1]) 
         p,_ = self.forward.apply(model_param,model_state,state)
         policy = jax.nn.sigmoid(p * self.sgm_scale)
-        #policy = policy.reshape(*org[:-1],1) # 恢复
+        #policy = policy.reshape(*org[:-1],1)
         return policy
 
     def loss_fn(self, model_param, model_state, input_data, value_models):
@@ -207,146 +207,34 @@ class KSPolicyTrainer(PolicyTrainer):
         full_state_dict['agt_s'] = agt_s
         c_share = self.policy_fn(model_param, model_state, full_state_dict)[...,0]
         return c_share
-    
-    '''def loss_fn(self, model_param, model_state, input_data, value_models):
-        k_cross = input_data["k_cross"]
-        ashock, ishock = input_data["ashock"], input_data["ishock"]
-        util_sum = jnp.zeros_like(k_cross)
-        t_unroll = self.t_unroll
-
-        def body_fn(t, carry):
-            util_sum, k_cross = carry
-            
-            # Compute k_mean
-            k_mean = jnp.mean(k_cross, axis=1, keepdims=True)  # n_path * 1
-            k_mean_tmp = jnp.tile(k_mean, (1, self.mparam.n_agt))  # n_path * n_agt
-            k_mean_tmp = jnp.expand_dims(k_mean_tmp, axis=-1)  # n_path * n_agt * 1
-            
-            # Prepare shocks
-            i_tmp = ishock[:, :, t][:,:,jnp.newaxis]  # n_path * n_agt * 1
-            a_tmp = jnp.tile(ashock[:, t][:,jnp.newaxis], (1, self.mparam.n_agt))  # n_path * n_agt
-            a_tmp = jnp.expand_dims(a_tmp, axis=-1)  # n_path * n_agt * 1
-            
-            # Build basic state
-            basic_s_tmp = jnp.concatenate([
-                jnp.expand_dims(k_cross, axis=-1),  # n_path * n_agt * 1
-                k_mean_tmp,
-                a_tmp,
-                i_tmp
-            ], axis=-1)
-            
-            # Normalize (assuming self.init_ds.normalize_data is JAX-compatible)
-            basic_s_tmp = self.init_ds.normalize_data(basic_s_tmp, key="basic_s")
-            agt_s_tmp = self.init_ds.normalize_data(
-                jnp.expand_dims(k_cross, axis=-1), key="agt_s")
-            
-            full_state_dict = {
-                "basic_s": basic_s_tmp,
-                "agt_s": agt_s_tmp
-            }
-
-            def last_step_ops():
-                value = jnp.zeros_like(k_cross)  # n_path
-                for model in value_models:
-                    value += self.init_ds.unnormalize_data(
-                        self.vtrainers[0].value_fn(model[0],model[1],full_state_dict)[..., 0], key="value")
-                value /= self.num_vnet
-                new_util_sum = util_sum + self.discount[t] * value
-                return new_util_sum, k_cross
-
-            def normal_step_ops():
-                c_share = self.policy_fn(model_param, model_state, full_state_dict)[..., 0]  # n_path * n_agt
-                c_share = jax.lax.cond(
-                    self.policy_config["opt_type"] == "game",
-                    lambda:jnp.concatenate([
-                        c_share[:, 0:1], 
-                        jax.lax.stop_gradient(c_share[:, 1:])
-                        ], axis=1),
-                    lambda:c_share
-                    )
-                
-                # labor tax rate - depend on ashock
-                tau = jnp.where(ashock[:, t][:,jnp.newaxis] < 1, self.mparam.tau_b, self.mparam.tau_g)
-                # total labor supply - depend on ashock
-                condition = ashock[:, t][:,jnp.newaxis] < 1  # 形状 (192,)
-                true_val = self.mparam.l_bar * self.mparam.er_b
-                false_val = self.mparam.l_bar * self.mparam.er_g
-
-                # 确保 true_val/false_val 是 (192,) 形状
-                emp = jnp.where(
-                    condition,
-                    jnp.full_like(condition, true_val, dtype=jnp.float32),  # 形状 (192,)
-                    jnp.full_like(condition, false_val, dtype=jnp.float32)  # 形状 (192,)
-                )
-                tau = tau.astype(DTYPE)
-                emp = emp.astype(DTYPE)
-
-                R = 1 - self.mparam.delta + ashock[:, t][:,jnp.newaxis] * self.mparam.alpha * (k_mean / emp) ** (self.mparam.alpha - 1)
-                wage = ashock[:, t][:,jnp.newaxis] * (1 - self.mparam.alpha) * (k_mean / emp) ** self.mparam.alpha
-                
-                wealth = R * k_cross + (1 - tau) * wage * self.mparam.l_bar * ishock[:, :, t] + \
-                        self.mparam.mu * wage * (1 - ishock[:, :, t])
-                
-                csmp = jnp.clip(c_share * wealth, EPSILON, wealth - EPSILON)
-                new_k_cross = wealth - csmp
-                new_util_sum = util_sum + self.discount[t] * jnp.log(csmp)
-                
-                return new_util_sum, new_k_cross
-
-            # Use lax.cond for conditional operations
-            util_sum, k_cross = jax.lax.cond(
-                t == t_unroll - 1,
-                last_step_ops,
-                jax.jit(normal_step_ops)
-            )
-            
-            return util_sum, k_cross
-
-        # Use lax.fori_loop for the main loop
-        util_sum, k_cross = jax.lax.fori_loop(0, t_unroll, body_fn, (util_sum, k_cross))
-
-        # Prepare output
-        if self.policy_config["opt_type"] == "socialplanner":
-            output_dict = {
-                "m_util": -jnp.mean(util_sum),
-                "k_end": jnp.mean(k_cross)
-            }
-        elif self.policy_config["opt_type"] == "game":
-            output_dict = {
-                "m_util": -jnp.mean(util_sum[:, 0]),
-                "k_end": jnp.mean(k_cross)
-            }
-        
-        return output_dict["m_util"], (output_dict["k_end"], model_state)'''
 
     def loss_fn(self, model_param, model_state, input_data, value_models):
         k_cross  = input_data["k_cross"]           # (n_path, n_agt)
         ashock   = input_data["ashock"]            # (n_path, T)
         ishock   = input_data["ishock"]            # (n_path, n_agt, T)
 
-        # 拆包 value 网络参数，避免闭包里多次 Python→Device 交互
         v_params, v_states = zip(*value_models)
 
-        # 单路径函数柯里化成不可见 batch 维
+        # function of simulate one path
         one = lambda k0, a_p, i_p: self._one_path_loss(
                     model_param, model_state,
                     k0, a_p, i_p,
                     v_params, v_states)
 
-        # ✅ 并行 n_path
+        # paralelly simulate n path using jax.vmap
         loss_batch, k_end_batch = jax.vmap(one)(k_cross, ashock, ishock)
 
         return loss_batch.mean(), (k_end_batch.mean(), model_state)
     
-    def _one_path_loss(self, model_param, model_state,  # ← 不 vmap
+    def _one_path_loss(self, model_param, model_state,  # ← NO vmap
                     k0, ashock_path, ishock_path,    # (n_agt,), (T,), (n_agt,T)
                     v_params, v_states               # list(zip(param,state))
                     ):
-        """单条路径 (n_agt,) → 标量损失, 结束资本"""
+        """A single path (n_agt,) → Scalar loss, End-simulation capital"""
 
-        # ▶ 将要在最后期用到的 Value 网络预先封装
+        # ▶ prepare value network
         def batched_value(full_state_dict):
-            """返回 (n_agt,) 的 value"""
+            """Return (n_agt,) value"""
             def _single(model, state):
                 return self.vtrainers[0].value_fn(model, state, full_state_dict)[..., 0]
             vals = jnp.stack([_single(p, s) for p, s in zip(v_params, v_states)], axis=0)
@@ -360,11 +248,10 @@ class KSPolicyTrainer(PolicyTrainer):
         def step(carry, inp):
             util_sum, k_cross = carry               # (n_agt,), (n_agt,)
 
-            # 解包 scan 输入
-            a_t, i_t, disc_t, t_idx = inp           # 标量, (n_agt,), scalar, int32
+            a_t, i_t, disc_t, t_idx = inp           # scalar, (n_agt,), scalar, int32
 
             k_mean = k_cross.mean(0, keepdims=True)         # (1,)
-            # ---------- 构造网络输入 ----------
+            # ---------- prepare network input ----------
             basic_s = jnp.stack([k_cross,             # (n_agt,)
                                 jnp.repeat(k_mean, n_agt),
                                 jnp.repeat(a_t,   n_agt),
@@ -376,15 +263,15 @@ class KSPolicyTrainer(PolicyTrainer):
                 "agt_s"  : self.init_ds.normalize_data(agt_s  , key="agt_s"),
             }
 
-            # ---------- 最后一期 ----------
+            # ---------- Last Iteration of Simulation ----------
             def last_step(_):
                 v = batched_value(full_state)        # (n_agt,)
                 return util_sum + disc_t * v, k_cross
 
-            # ---------- 正常期 ----------
+            # ---------- Normal Iteration of Simulation ----------
             def normal_step(_):
                 c_share = self.policy_fn(model_param, model_state, full_state)[..., 0]  # (n_agt,)
-                if opt_game:                        # 只优化 0 号代理
+                if opt_game:                        # Only optimize agent 0
                     c_share = jnp.concatenate([c_share[:1], jax.lax.stop_gradient(c_share[1:])], axis=0, dtype=JNP_DTYPE)
 
                 tau  = jnp.where(a_t < 1, self.mparam.tau_b, self.mparam.tau_g)
@@ -421,7 +308,7 @@ class KSPolicyTrainer(PolicyTrainer):
                                         scan_inputs,
                                         length=T)
 
-        # ---------- 聚合 ----------
+        # ---------- Aggregate ----------
         if self.policy_config["opt_type"] == "socialplanner":
             m_util = -jnp.mean(util_fin)
         else:                                       # game → agent 0
