@@ -14,5 +14,4 @@ dependencies:
     - jax[cuda12]
     - dm-haiku
     - optax
-    - pickle
-    
+    - absl-py

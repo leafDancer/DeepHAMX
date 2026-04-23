@@ -1,5 +1,13 @@
-# DeepHAMX: JAX-Accelerated Drop-in Replacement for DeepHAM
-## Original Version
+# DeepHAMX
+
+**DeepHAMX** is a [JAX](https://github.com/google/jax)-accelerated reimplementation of [**DeepHAM**](https://github.com/frankhan91/DeepHAM): a global solution method for heterogeneous-agent models with aggregate shocks (Han, Yang, and E). This repository keeps the same high-level algorithm and configuration style as the original PyTorch code, while focusing on faster execution through JAX, `jax.numpy`, [Haiku](https://github.com/deepmind/dm-haiku), and [Optax](https://github.com/deepmind/optax).
+
+> **Scope.** The training entry point in this fork targets the **Krusell–Smith (KS)** model. Additional JSON configs under `srcx/configs/` may be carried over from upstream experiments; only the KS training script is wired for JAX in the current layout.
+
+---
+
+## Original method and paper
+
 <div align="center">
 
 ### DeepHAM: A global solution method for heterogeneous agent models with aggregate shocks
@@ -10,48 +18,105 @@ Jiequn Han, Yucheng Yang, Weinan E
 [![SSRN](https://img.shields.io/badge/SSRN-3990409-133a6f.svg)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3990409)
 [![PDF](https://img.shields.io/badge/PDF-8A2BE2)](https://yangycpku.github.io/files/DeepHAM_paper.pdf)
 
-Link to original repository: https://github.com/frankhan91/DeepHAM
+Upstream repository: [github.com/frankhan91/DeepHAM](https://github.com/frankhan91/DeepHAM)
 
 </div>
 
-## Dependencies of DeepHAMX
+---
+
+## Repository layout
+
+| Path | Role |
+|------|------|
+| `srcx/` | JAX implementation: training, value networks, policy, datasets, utilities |
+| `srcx/configs/KS/` | Example Krusell–Smith experiment configs (JSON) |
+| `srcx/train_KS.py` | Main training script (absl flags) |
+| `data/` | Place model inputs (for example `.mat` policy matrices) and run outputs under `data/simul_results/` |
+| `environment.yml` | Conda environment specification |
+
+The KS configs reference MATLAB-derived assets such as `data/KS_policy_N50_v1.mat`. If those files are not in your clone, obtain the corresponding data from the [original DeepHAM repository](https://github.com/frankhan91/DeepHAM) or your own preprocessing pipeline, and align `mats_path` in the JSON config with your local paths.
+
+---
+
+## Installation
+
+**Tested setup:** Python **3.11**, JAX built for **CUDA 12** (GPU). CPU-only JAX installs are possible but are not the configuration used for the benchmarks below.
+
+### Option A — Conda (recommended)
+
 ```bash
-# You can use our environment.yml file
 conda env create -f environment.yml
-# Or, you can do it manually
-conda create -n deephamx python=3.11.0
 conda activate deephamx
-pip3 install jax[cuda12] dm-haiku optax pickle tqdm scipy
 ```
 
-*We have only tested this code on CUDA 12. Based on experience, configuring JAX with CUDA 11 can be very time-consuming, so we recommend using CUDA 12 as your CUDA version.*
-## Running
-### Quick start for the Krusell-Smith (KS) model under default configs:
-To use DeepHAM-X to solve the competitive equilibrium of the KS model, run
+### Option B — Manual Conda env
+
 ```bash
-cd srcx # Don't forget!
+conda create -n deephamx python=3.11
+conda activate deephamx
+pip install "jax[cuda12]" dm-haiku optax absl-py tqdm scipy
+```
+
+Install the JAX variant that matches your platform (`jax[cuda12]` vs CPU wheels) following the [official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html).
+
+> **Note.** CUDA 12 is strongly recommended if you use NVIDIA GPUs. Matching JAX wheels to an older CUDA stack can be brittle; the authors tested primarily on **CUDA 12**.
+
+---
+
+## Quick start (Krusell–Smith)
+
+Run from the `srcx` directory so relative config and data paths resolve as in the defaults.
+
+```bash
+cd srcx
 python3 train_KS.py
 ```
-*Current JAX version only support KS model.*
+
+### Command-line flags
+
+`train_KS.py` uses [absl.flags](https://abseil.io/docs/python/guides/flags):
+
+| Flag | Short | Default | Meaning |
+|------|-------|---------|---------|
+| `--config_path` | `-c` | `./configs/KS/game_nn_n50.json` | Path to the experiment JSON |
+| `--exp_name` | `-n` | `test` | Suffix for the output run directory name |
+
+Example:
+
+```bash
+cd srcx
+python3 train_KS.py -c ./configs/KS/game_nn_n10.json -n my_run
+```
+
+Checkpoints and logs are written under `data/simul_results/KS/` according to policy type, sampling mode, number of agents, and `exp_name` (see `train_KS.py` for the exact naming pattern).
+
+### Floating-point precision
+
+Global dtype for the KS run is set in `srcx/param.py` (`DTYPE = "float64"` or `"float32"`). For float64, the script enables `jax_enable_x64` automatically.
+
+---
+
 ## Performance
-### Tested on NVIDIA GeForce RTX 3090 Clusters with 2 AMD EPYC 7H12 64-Core Processor
 
-<div style="text-align:center; margin: 0 auto; display: table">
+Benchmarks were run on **NVIDIA GeForce RTX 3090** nodes (**2× AMD EPYC 7H12**, 64 cores each). Speedups come from computational improvements (JAX/XLA, batching, etc.); **algorithm parameters and the overall solving procedure were not intentionally changed** relative to the reference implementation. You can cross-check numerical behavior using validation utilities from the original DeepHAM repository.
 
-| FP  | Arch  | CUDA Streams | Runtime | Valid U   | End K   |
-|:---:|:-----:|:------------:|:-------:|:---------:|:-------:|
-| 32  | JAX   | 1            | 17m     | 104.035   | 39.237  |
-| 32  | JAX   | 2            | 17m     | 104.096   | 38.329  |
-| 64  | JAX   | 1            | 41m     | 103.728   | 38.380  |
-| 64  | JAX   | 2            | 34m     | 103.707   | 39.361  |
-| 32  | ORG | 1            | 57m     | 103.702   | 39.014  |
-| 64  | ORG | 1            | 65m     | 104.126   | 39.326  |
+| Precision | Implementation | CUDA streams | Wall-clock | Valid **U** | End **K** |
+|:---------:|:--------------:|:------------:|:----------:|:-----------:|:---------:|
+| FP32 | JAX | 1 | 17 min | 104.035 | 39.237 |
+| FP32 | JAX | 2 | 17 min | 104.096 | 38.329 |
+| FP64 | JAX | 1 | 41 min | 103.728 | 38.380 |
+| FP64 | JAX | 2 | 34 min | 103.707 | 39.361 |
+| FP32 | Original (ORG) | 1 | 57 min | 103.702 | 39.014 |
+| FP64 | Original (ORG) | 1 | 65 min | 104.126 | 39.326 |
 
-</div>
-We accelerated the original implementation of DeepHams by 3.5× using JAX, with optimizations purely based on computational improvements, without altering any algorithm parameters or the solving process. You can verify the JAX version at different computational precisions using the validation code from the original repository.
+Roughly **3.5×** faster than the original PyTorch run in the FP32, single-stream setting reported above.
+
+---
 
 ## Citation
-If you find this work helpful, please consider starring this repo and citing our paper using the following Bibtex.
+
+If you use DeepHAM in research, please cite the original paper:
+
 ```bibtex
 @article{HanYangE2021deepham,
   title={Deep{HAM}: A global solution method for heterogeneous agent models with aggregate shocks},
@@ -61,5 +126,17 @@ If you find this work helpful, please consider starring this repo and citing our
 }
 ```
 
+If this JAX port is useful in your work, a star on the repository is appreciated.
+
+---
+
+## License
+
+This project is distributed under the **GNU Lesser General Public License v2.1** — see [`LICENSE`](LICENSE). Respect upstream licensing and attribution when reusing or redistributing code and data.
+
+---
+
 ## Contact
-Please contact us at jiequnhan@gmail.com and yucheng.yang@uzh.ch if you have any questions about DeepHAM and at wang2021@stu.pku.edu.cn if you have any questions about DeepHAM-X.
+
+- **DeepHAM (method and theory):** [jiequnhan@gmail.com](mailto:jiequnhan@gmail.com), [yucheng.yang@uzh.ch](mailto:yucheng.yang@uzh.ch)  
+- **DeepHAMX (JAX port):** [wang2021@stu.pku.edu.cn](mailto:wang2021@stu.pku.edu.cn)
