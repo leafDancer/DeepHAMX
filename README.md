@@ -33,6 +33,7 @@ Upstream repository: [github.com/frankhan91/DeepHAM](https://github.com/frankhan
 | `srcx/train_KS.py` | Main training script (absl flags) |
 | `data/` | Place model inputs (for example `.mat` policy matrices) and run outputs under `data/simul_results/` |
 | `environment.yml` | Conda environment specification |
+| `scripts/smoke_check.py` | Quick JAX / import / shape sanity check (no full training run) |
 
 The KS configs reference MATLAB-derived assets such as `data/KS_policy_N50_v1.mat`. If those files are not in your clone, obtain the corresponding data from the [original DeepHAM repository](https://github.com/frankhan91/DeepHAM) or your own preprocessing pipeline, and align `mats_path` in the JSON config with your local paths.
 
@@ -60,6 +61,16 @@ pip install "jax[cuda12]" dm-haiku optax absl-py tqdm scipy
 Install the JAX variant that matches your platform (`jax[cuda12]` vs CPU wheels) following the [official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html).
 
 > **Note.** CUDA 12 is strongly recommended if you use NVIDIA GPUs. Matching JAX wheels to an older CUDA stack can be brittle; the authors tested primarily on **CUDA 12**.
+
+### Smoke test (optional)
+
+After activating your JAX environment, from the **repository root** run:
+
+```bash
+python3 scripts/smoke_check.py
+```
+
+This script imports `srcx` modules, runs a short `simul_shocks` / `next_wealth` path, and performs one Haiku MLP forward pass. It mirrors `train_KS.py` by turning on **`jax_enable_x64`** when `srcx/param.py` has `DTYPE = "float64"`, and in that case it also **asserts `float64` dtypes** on the sampled tensors so silent float32 truncation is caught early.
 
 ---
 
